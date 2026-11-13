@@ -1,0 +1,586 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OPEN WORLD INDIA - GTA Camera</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;font-family:Arial;background:#87ceeb;color:white}
+canvas{display:block}
+#gameTitle{position:fixed;top:15px;left:15px;z-index:5;font-size:21px;font-weight:900;text-shadow:2px 2px 5px #000}
+#mission{position:fixed;top:55px;left:15px;z-index:5;background:#0009;padding:10px 14px;border-radius:10px;font-size:14px}
+#stats{position:fixed;top:15px;right:15px;z-index:5;background:#0009;padding:10px 14px;border-radius:10px;font-size:14px}
+#message{position:fixed;top:25%;left:50%;transform:translateX(-50%);z-index:10;background:#111d;padding:15px 22px;border-radius:12px;display:none;text-align:center;font-weight:bold}
+#help{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:5;background:#0009;padding:9px 14px;border-radius:9px;font-size:12px;white-space:nowrap}
+#mobileControls{display:none;position:fixed;inset:0;z-index:8;pointer-events:none}
+#joystick{position:absolute;bottom:35px;left:25px;width:125px;height:125px;border-radius:50%;background:#ffffff35;border:2px solid #ffffff90;pointer-events:auto;touch-action:none}
+#stick{position:absolute;width:48px;height:48px;border-radius:50%;background:#ffffffcc;left:36px;top:36px}
+.mobileBtn{position:absolute;right:25px;bottom:45px;width:65px;height:65px;border-radius:50%;border:2px solid white;background:#1976d2cc;color:white;font-size:13px;font-weight:bold;pointer-events:auto;touch-action:none}
+#runBtn{right:100px;bottom:45px;background:#e67e22dd}
+#jumpBtn{right:25px;bottom:125px;background:#27ae60dd}
+#cameraArea{position:absolute;right:0;top:0;width:55%;height:70%;pointer-events:auto;touch-action:none}
+@media(pointer:coarse){#mobileControls{display:block}#help{display:none}}
+</style>
+</head>
+
+<body>
+<div id="gameTitle">🇮🇳 OPEN WORLD INDIA</div>
+
+<div id="mission">
+<b>MISSION: CITY EXPLORER</b><br>
+Collect all 5 golden coins<br>
+<span id="progress">Coins: 0 / 5</span>
+</div>
+
+<div id="stats">
+<div>🌆 INDIA CITY</div>
+<div id="speed">Speed: 0</div>
+</div>
+
+<div id="message"></div>
+
+<div id="help">WASD: Move | SHIFT: Run | SPACE: Jump | Mouse: Camera</div>
+
+<div id="mobileControls">
+<div id="joystick"><div id="stick"></div></div>
+<div id="cameraArea"></div>
+<button class="mobileBtn" id="jumpBtn">JUMP</button>
+<button class="mobileBtn" id="runBtn">RUN</button>
+</div>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+/* GAME SETUP */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 75, 240);
+
+const camera = new THREE.PerspectiveCamera(
+  70, window.innerWidth/window.innerHeight, 0.1, 500
+);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias:false,
+  powerPreference:"high-performance"
+});
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));
+document.body.appendChild(renderer.domElement);
+
+const clock = new THREE.Clock();
+
+/* LIGHTS */
+scene.add(new THREE.HemisphereLight(0xffffff,0x536b45,2));
+
+const sun = new THREE.DirectionalLight(0xffffff,1.5);
+sun.position.set(50,100,40);
+scene.add(sun);
+
+/* MATERIALS */
+const mat = {
+ grass:new THREE.MeshLambertMaterial({color:0x55a34a}),
+ road:new THREE.MeshLambertMaterial({color:0x33383d}),
+ line:new THREE.MeshBasicMaterial({color:0xffffff}),
+ player:new THREE.MeshLambertMaterial({color:0x1769aa}),
+ skin:new THREE.MeshLambertMaterial({color:0xd69b70}),
+ dark:new THREE.MeshLambertMaterial({color:0x20252b}),
+ trunk:new THREE.MeshLambertMaterial({color:0x704321}),
+ leaves:new THREE.MeshLambertMaterial({color:0x238b45})
+};
+
+/* GROUND */
+const ground = new THREE.Mesh(
+ new THREE.PlaneGeometry(500,500),mat.grass
+);
+ground.rotation.x=-Math.PI/2;
+ground.position.y=-0.1;
+scene.add(ground);
+
+/* ROADS */
+function createRoad(x,z,width,length,rotation=0){
+ const road=new THREE.Mesh(
+  new THREE.PlaneGeometry(width,length),mat.road
+ );
+ road.rotation.x=-Math.PI/2;
+ road.rotation.z=rotation;
+ road.position.set(x,0.01,z);
+ scene.add(road);
+
+ for(let i=0;i<Math.floor(length/10);i++){
+  const mark=new THREE.Mesh(
+   new THREE.BoxGeometry(0.25,0.04,4),mat.line
+  );
+  mark.position.set(x,0.05,z-length/2+i*10+5);
+  mark.rotation.y=rotation;
+  scene.add(mark);
+ }
+}
+createRoad(0,0,16,250);
+createRoad(0,0,250,16,Math.PI/2);
+createRoad(-70,0,10,250);
+createRoad(70,0,10,250);
+createRoad(0,-70,250,10,Math.PI/2);
+createRoad(0,70,250,10,Math.PI/2);
+
+/* BUILDINGS */
+const buildingColors=[
+ 0xe8a66b,0xd6d6d6,0xe4c27a,0xb7c7d9,
+ 0xd78c73,0xaab7a3,0xc5a6d8
+];
+
+function createBuilding(x,z,w,h,d){
+ const color=buildingColors[Math.floor(Math.random()*buildingColors.length)];
+
+ const building=new THREE.Mesh(
+  new THREE.BoxGeometry(w,h,d),
+  new THREE.MeshLambertMaterial({color})
+ );
+ building.position.set(x,h/2,z);
+ scene.add(building);
+
+ const roof=new THREE.Mesh(
+  new THREE.BoxGeometry(w+0.5,0.7,d+0.5),
+  new THREE.MeshLambertMaterial({color:0x555555})
+ );
+ roof.position.set(x,h+0.35,z);
+ scene.add(roof);
+
+ const windowMat=new THREE.MeshBasicMaterial({color:0x78c9e8});
+ const floors=Math.max(1,Math.floor(h/4));
+
+ for(let floor=0;floor<floors;floor++){
+  for(let col=0;col<3;col++){
+   const win=new THREE.Mesh(
+    new THREE.BoxGeometry(1.1,1.2,0.08),windowMat
+   );
+   win.position.set(
+    x-w/3+col*w/3,
+    floor*4+2,
+    z+d/2+0.05
+   );
+   scene.add(win);
+  }
+ }
+}
+
+for(let x=-110;x<=110;x+=22){
+ for(let z=-110;z<=110;z+=22){
+  if(
+   Math.abs(x)<13 || Math.abs(z)<13 ||
+   Math.abs(x-70)<9 || Math.abs(x+70)<9 ||
+   Math.abs(z-70)<9 || Math.abs(z+70)<9
+  ) continue;
+
+  createBuilding(
+   x,z,
+   10+Math.random()*5,
+   8+Math.random()*25,
+   10+Math.random()*5
+  );
+ }
+}
+
+/* TREES */
+function createTree(x,z){
+ const trunk=new THREE.Mesh(
+  new THREE.CylinderGeometry(0.35,0.5,3,6),mat.trunk
+ );
+ trunk.position.set(x,1.5,z);
+ scene.add(trunk);
+
+ const leaves=new THREE.Mesh(
+  new THREE.SphereGeometry(2.2,7,6),mat.leaves
+ );
+ leaves.position.set(x,4,z);
+ scene.add(leaves);
+}
+
+for(let i=0;i<90;i++){
+ const x=(Math.random()-0.5)*230;
+ const z=(Math.random()-0.5)*230;
+ if(Math.abs(x)<12 || Math.abs(z)<12) continue;
+ createTree(x,z);
+}
+
+/* PLAYER */
+const player=new THREE.Group();
+scene.add(player);
+
+const body=new THREE.Mesh(
+ new THREE.CapsuleGeometry(0.65,1.1,4,8),mat.player
+);
+body.position.y=1.35;
+player.add(body);
+
+const head=new THREE.Mesh(
+ new THREE.SphereGeometry(0.48,10,8),mat.skin
+);
+head.position.y=2.55;
+player.add(head);
+
+const hair=new THREE.Mesh(
+ new THREE.SphereGeometry(0.49,10,6),mat.dark
+);
+hair.scale.set(1,0.45,1);
+hair.position.y=2.83;
+player.add(hair);
+
+const armGeometry=new THREE.CapsuleGeometry(0.18,0.75,3,6);
+const leftArm=new THREE.Mesh(armGeometry,mat.skin);
+leftArm.position.set(-0.78,1.45,0);
+player.add(leftArm);
+
+const rightArm=new THREE.Mesh(armGeometry,mat.skin);
+rightArm.position.set(0.78,1.45,0);
+player.add(rightArm);
+
+const legMat=new THREE.MeshLambertMaterial({color:0x252b35});
+const legGeometry=new THREE.CapsuleGeometry(0.22,0.7,3,6);
+
+const leftLeg=new THREE.Mesh(legGeometry,legMat);
+leftLeg.position.set(-0.3,0.4,0);
+player.add(leftLeg);
+
+const rightLeg=new THREE.Mesh(legGeometry,legMat);
+rightLeg.position.set(0.3,0.4,0);
+player.add(rightLeg);
+
+player.position.set(0,0,5);
+
+/* GTA STYLE CAMERA SETTINGS */
+let cameraAngle=0;
+let cameraHeight=4.2;
+let cameraDistance=7;
+
+const cameraTarget=new THREE.Vector3();
+const cameraOffset=new THREE.Vector3();
+const desiredCameraPosition=new THREE.Vector3();
+
+function updateCamera(delta){
+ cameraTarget.set(
+  player.position.x,
+  player.position.y+2.2,
+  player.position.z
+ );
+
+ cameraOffset.set(
+  Math.sin(cameraAngle)*cameraDistance,
+  cameraHeight,
+  Math.cos(cameraAngle)*cameraDistance
+ );
+
+ desiredCameraPosition.copy(cameraTarget).add(cameraOffset);
+
+ // Smooth camera follow
+ const smooth=1-Math.pow(0.001,delta);
+ camera.position.lerp(desiredCameraPosition,smooth);
+ camera.lookAt(cameraTarget);
+}
+
+/* KEYBOARD */
+const keys={};
+
+window.addEventListener("keydown",e=>{
+ keys[e.code]=true;
+ if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)){
+  e.preventDefault();
+ }
+});
+
+window.addEventListener("keyup",e=>keys[e.code]=false);
+
+/* MOUSE CAMERA */
+let dragging=false;
+let lastMouseX=0;
+let lastMouseY=0;
+
+renderer.domElement.addEventListener("pointerdown",e=>{
+ if(e.pointerType==="mouse"){
+  dragging=true;
+  lastMouseX=e.clientX;
+  lastMouseY=e.clientY;
+ }
+});
+
+window.addEventListener("pointerup",()=>dragging=false);
+
+window.addEventListener("pointermove",e=>{
+ if(!dragging || e.pointerType!=="mouse") return;
+
+ const dx=e.clientX-lastMouseX;
+ const dy=e.clientY-lastMouseY;
+
+ cameraAngle-=dx*0.005;
+
+ cameraHeight=THREE.MathUtils.clamp(
+  cameraHeight+dy*0.025,2.5,9
+ );
+
+ lastMouseX=e.clientX;
+ lastMouseY=e.clientY;
+});
+
+/* MOBILE JOYSTICK */
+let joystickX=0;
+let joystickY=0;
+let joystickActive=false;
+
+const joystick=document.getElementById("joystick");
+const stick=document.getElementById("stick");
+
+function updateJoystick(e){
+ const rect=joystick.getBoundingClientRect();
+ let dx=e.clientX-(rect.left+rect.width/2);
+ let dy=e.clientY-(rect.top+rect.height/2);
+
+ const max=38;
+ const distance=Math.hypot(dx,dy);
+
+ if(distance>max){
+  dx=dx/distance*max;
+  dy=dy/distance*max;
+ }
+
+ joystickX=dx/max;
+ joystickY=dy/max;
+
+ stick.style.left=(36+dx)+"px";
+ stick.style.top=(36+dy)+"px";
+}
+
+joystick.addEventListener("pointerdown",e=>{
+ joystickActive=true;
+ joystick.setPointerCapture(e.pointerId);
+ updateJoystick(e);
+});
+
+joystick.addEventListener("pointermove",e=>{
+ if(joystickActive) updateJoystick(e);
+});
+
+function resetJoystick(){
+ joystickActive=false;
+ joystickX=0;
+ joystickY=0;
+ stick.style.left="36px";
+ stick.style.top="36px";
+}
+joystick.addEventListener("pointerup",resetJoystick);
+joystick.addEventListener("pointercancel",resetJoystick);
+
+/* MOBILE CAMERA TOUCH */
+let cameraTouchX=0;
+let cameraTouchY=0;
+let cameraTouchActive=false;
+
+const cameraArea=document.getElementById("cameraArea");
+
+cameraArea.addEventListener("pointerdown",e=>{
+ cameraTouchActive=true;
+ cameraTouchX=e.clientX;
+ cameraTouchY=e.clientY;
+ cameraArea.setPointerCapture(e.pointerId);
+});
+
+cameraArea.addEventListener("pointermove",e=>{
+ if(!cameraTouchActive) return;
+
+ const dx=e.clientX-cameraTouchX;
+ const dy=e.clientY-cameraTouchY;
+
+ cameraAngle-=dx*0.008;
+
+ cameraHeight=THREE.MathUtils.clamp(
+  cameraHeight+dy*0.025,2.5,9
+ );
+
+ cameraTouchX=e.clientX;
+ cameraTouchY=e.clientY;
+});
+
+cameraArea.addEventListener("pointerup",()=>cameraTouchActive=false);
+cameraArea.addEventListener("pointercancel",()=>cameraTouchActive=false);
+
+/* MOBILE BUTTONS */
+let mobileRun=false;
+let mobileJump=false;
+
+const runBtn=document.getElementById("runBtn");
+const jumpBtn=document.getElementById("jumpBtn");
+
+runBtn.addEventListener("pointerdown",e=>{
+ e.preventDefault(); mobileRun=true;
+});
+runBtn.addEventListener("pointerup",()=>mobileRun=false);
+runBtn.addEventListener("pointercancel",()=>mobileRun=false);
+runBtn.addEventListener("pointerleave",()=>mobileRun=false);
+
+jumpBtn.addEventListener("pointerdown",e=>{
+ e.preventDefault(); mobileJump=true;
+});
+jumpBtn.addEventListener("pointerup",()=>mobileJump=false);
+jumpBtn.addEventListener("pointercancel",()=>mobileJump=false);
+
+/* JUMP */
+let verticalVelocity=0;
+let isOnGround=true;
+
+/* COINS */
+const coins=[];
+const coinPositions=[
+ [15,5,15],[-30,5,25],[40,5,-35],[-55,5,-50],[80,5,60]
+];
+
+const coinMaterial=new THREE.MeshBasicMaterial({color:0xffd700});
+
+coinPositions.forEach(pos=>{
+ const coin=new THREE.Mesh(
+  new THREE.TorusGeometry(0.8,0.2,8,16),
+  coinMaterial
+ );
+ coin.position.set(...pos);
+ coin.rotation.x=Math.PI/2;
+ scene.add(coin);
+ coins.push(coin);
+});
+
+let collected=0;
+
+function showMessage(text){
+ const message=document.getElementById("message");
+ message.innerHTML=text;
+ message.style.display="block";
+ setTimeout(()=>message.style.display="none",2500);
+}
+
+/* PLAYER MOVEMENT */
+const direction=new THREE.Vector3();
+const forward=new THREE.Vector3();
+const right=new THREE.Vector3();
+
+function movePlayer(delta){
+ const moveForward=
+  (keys["KeyW"]||keys["ArrowUp"]?1:0)-
+  (keys["KeyS"]||keys["ArrowDown"]?1:0)-
+  joystickY;
+
+ const moveSide=
+  (keys["KeyD"]||keys["ArrowRight"]?1:0)-
+  (keys["KeyA"]||keys["ArrowLeft"]?1:0)+
+  joystickX;
+
+ // Movement follows the camera direction
+ forward.set(-Math.sin(cameraAngle),0,-Math.cos(cameraAngle));
+ right.set(Math.cos(cameraAngle),0,-Math.sin(cameraAngle));
+
+ direction.set(0,0,0);
+ direction.addScaledVector(forward,moveForward);
+ direction.addScaledVector(right,moveSide);
+
+ if(direction.length()>1) direction.normalize();
+
+ const moving=direction.length()>0.05;
+ const running=keys["ShiftLeft"]||keys["ShiftRight"]||mobileRun;
+ const speed=running?13:7;
+
+ if(moving){
+  player.position.x+=direction.x*speed*delta;
+  player.position.z+=direction.z*speed*delta;
+
+  // Character turns toward movement direction
+  const targetRotation=Math.atan2(direction.x,direction.z);
+  let rotationDifference=targetRotation-player.rotation.y;
+
+  rotationDifference=Math.atan2(
+   Math.sin(rotationDifference),
+   Math.cos(rotationDifference)
+  );
+
+  player.rotation.y+=rotationDifference*Math.min(1,delta*12);
+
+  const walk=Math.sin(performance.now()*0.012)*0.25;
+  leftLeg.rotation.x=walk;
+  rightLeg.rotation.x=-walk;
+  leftArm.rotation.x=-walk;
+  rightArm.rotation.x=walk;
+ }else{
+  leftLeg.rotation.x=0;
+  rightLeg.rotation.x=0;
+  leftArm.rotation.x=0;
+  rightArm.rotation.x=0;
+ }
+
+ document.getElementById("speed").innerText=
+  "Speed: "+(moving?speed:0);
+
+ if((keys["Space"]||mobileJump)&&isOnGround){
+  verticalVelocity=10;
+  isOnGround=false;
+ }
+
+ verticalVelocity-=25*delta;
+ player.position.y+=verticalVelocity*delta;
+
+ if(player.position.y<=0){
+  player.position.y=0;
+  verticalVelocity=0;
+  isOnGround=true;
+ }
+
+ player.position.x=THREE.MathUtils.clamp(player.position.x,-120,120);
+ player.position.z=THREE.MathUtils.clamp(player.position.z,-120,120);
+}
+
+/* COIN COLLECTION */
+function updateCoins(delta){
+ coins.forEach(coin=>{
+  if(!coin.visible)return;
+
+  coin.rotation.z+=delta*2;
+
+  if(player.position.distanceTo(coin.position)<2.5){
+   coin.visible=false;
+   collected++;
+
+   document.getElementById("progress").innerText=
+    "Coins: "+collected+" / 5";
+
+   showMessage("⭐ Coin collected!");
+
+   if(collected===5){
+    showMessage("🏆 MISSION COMPLETE! WELL DONE!");
+   }
+  }
+ });
+}
+
+/* GAME LOOP */
+function animate(){
+ requestAnimationFrame(animate);
+
+ const delta=Math.min(clock.getDelta(),0.05);
+
+ movePlayer(delta);
+ updateCoins(delta);
+ updateCamera(delta);
+
+ renderer.render(scene,camera);
+}
+animate();
+
+/* RESIZE */
+window.addEventListener("resize",()=>{
+ camera.aspect=window.innerWidth/window.innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(window.innerWidth,window.innerHeight);
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));
+});
+
+showMessage("WELCOME TO OPEN WORLD INDIA!");
+</script>
+</body>
+</html>
